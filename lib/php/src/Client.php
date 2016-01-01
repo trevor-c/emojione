@@ -8,19 +8,33 @@ namespace Emojione;
 
 class Client implements ClientInterface
 {
-    public $ascii = false; // convert ascii smileys?
+    public $ascii = true; // convert ascii smileys?
     public $unicodeAlt = true; // use the unicode char as the alt attribute (makes copy and pasting the resulting text better)
     public $imageType = 'png'; // or svg
     public $cacheBustParam = '?v=1.2.4';
     public $sprites = false;
+    
+
+    public $svgType = 'image'; // or object
+    
     public $imagePathPNG = '//cdn.jsdelivr.net/emojione/assets/png/';
     public $imagePathSVG = '//cdn.jsdelivr.net/emojione/assets/svg/';
     public $imagePathSVGSprites = './../../assets/sprites/emojione.sprites.svg';
     public $unicode_replaceWith = false;
-    public $ignoredRegexp = '<object[^>]*>.*?<\/object>|<span[^>]*>.*?<\/span>|<(?:object|embed|svg|img|div|span|p|a)[^>]*>';
+    //public $ignoredRegexp = '<object[^>]*>.*?<\/object>|<span[^>]*>.*?<\/span>|<(?:object|embed|svg|img|div|span|p|a)[^>]*>';
+    
+    //remove span for now - should only ignore spans with emojione class
+    public $ignoredRegexp = '<object[^>]*>.*?<\/object>|<(?:object|embed|svg|img|div|span|p|a)[^>]*>';
+    
+        //*class=("|\')emojione-*[^"|\']("|\')
+    
     public $unicodeRegexp = '([*#0-9](?>\\xEF\\xB8\\x8F)?\\xE2\\x83\\xA3|\\xC2[\\xA9\\xAE]|\\xE2..(\\xF0\\x9F\\x8F[\\xBB-\\xBF])?(?>\\xEF\\xB8\\x8F)?|\\xE3(?>\\x80[\\xB0\\xBD]|\\x8A[\\x97\\x99])(?>\\xEF\\xB8\\x8F)?|\\xF0\\x9F(?>[\\x80-\\x86].(?>\\xEF\\xB8\\x8F)?|\\x87.\\xF0\\x9F\\x87.|..(\\xF0\\x9F\\x8F[\\xBB-\\xBF])?|(((?<zwj>\\xE2\\x80\\x8D)\\xE2\\x9D\\xA4\\xEF\\xB8\\x8F\k<zwj>\\xF0\\x9F..(\k<zwj>\\xF0\\x9F\\x91.)?|(\\xE2\\x80\\x8D\\xF0\\x9F\\x91.){2,3}))?))';
 
     public $shortcodeRegexp = ':([-+\\w]+):';
+    
+    public $imageRegexpPNG = '<img class="emojione"[^>]*alt="(.*?[^"])".*?>';
+    public $imageRegexpSVGIMG = '<img class="emojione"[^>]*alt="(.*?[^"])".*?>';
+    public $imageRegexpSVGOBJ = '<object class="emojione"[^>]*>(.*?)<\/object>';
 
     protected $ruleset = null;
 
@@ -82,7 +96,8 @@ class Client implements ClientInterface
             $ruleset = $this->getRuleset();
             $asciiRegexp = $ruleset->getAsciiRegexp();
 
-            $string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|^)'.$asciiRegexp.'(?=\\s|$|[!,.?]))/S', array($this, 'asciiToUnicodeCallback'), $string);
+            //$string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|^)'.$asciiRegexp.'(?=\\s|$|[!,.?]))/S', array($this, 'asciiToUnicodeCallback'), $string);
+            $string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|\x{C2A0}|^)'.$asciiRegexp.'(?=\\s|\x{C2A0}|$|[!,\.]))/Su', array($this, 'asciiToUnicodeCallback'), $string);
         }
 
         return $string;
@@ -118,12 +133,40 @@ class Client implements ClientInterface
             $ruleset = $this->getRuleset();
             $asciiRegexp = $ruleset->getAsciiRegexp();
 
-            $string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|^)'.$asciiRegexp.'(?=\\s|$|[!,.?]))/S', array($this, 'asciiToImageCallback'), $string);
+            //$string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|^)'.$asciiRegexp.'(?=\\s|$|[!,.?]))/S', array($this, 'asciiToImageCallback'), $string);
+            $string = preg_replace_callback('/'.$this->ignoredRegexp.'|((\\s|\x{C2A0}|^)'.$asciiRegexp.'(?=\\s|\x{C2A0}|$|[!,\.]))/Su', array($this, 'asciiToImageCallback'), $string);
         }
 
         return $string;
     }
-
+    
+    
+    
+    
+    
+    /**
+     * This will output shortcode in place of image markup (for png or svg) input.
+     *
+     * @param   string  $string The input string.
+     * @return  string  String with shortnames.
+     */
+    public function imageToShortname($string)
+    {
+        
+        $imageregExp = ($this->svgType=='image') ? $this->imageRegexpSVGIMG : $this->imageRegexpSVGOBJ;
+        $string = preg_replace_callback('/'.$imageregExp.'/Si', array($this, 'imageToShortnameCallback'), $string);
+    
+        return $string;
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
     /**
      * This will return the shortname from unicode input.
      *
@@ -257,12 +300,41 @@ class Client implements ClientInterface
             {
                 return '<svg class="emojione"><description>'.$alt.'</description><use xlink:href="'.$this->imagePathSVGSprites.'#emoji-'.$unicode.'"></use></svg>';
             }
+            else if ($this->svgType == 'image')
+            {
+                return '<img class="emojione" src="'.$this->imagePathSVG.$filename.'.svg'.$this->cacheBustParam.'" alt="'.$alt.'">';
+            }
             else
             {
                 return '<object class="emojione" data="'.$this->imagePathSVG.$filename.'.svg'.$this->cacheBustParam.'" type="image/svg+xml" standby="'.$alt.'">'.$alt.'</object>';
             }
         }
     }
+
+
+
+    /**
+     * @param   array   $m  Results of preg_replace_callback().
+     * @return  string  Image HTML replacement result.
+     */
+    public function imageToShortnameCallback($m)
+    {
+         
+        if ((!is_array($m)) || (!isset($m[1])) || (empty($m[1]))) {
+            return $m[0];
+        }
+        else {
+            //$ruleset = $this->getRuleset();
+            //$shortcode_replace = $ruleset->getShortcodeReplace();
+            
+            $shortname = $m[1];
+
+            return $shortname;
+
+        }
+    }
+
+
 
     /**
      * @param   array   $m  Results of preg_replace_callback().

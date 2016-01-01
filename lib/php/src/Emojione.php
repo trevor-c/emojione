@@ -15,7 +15,12 @@ class Emojione
     public static $ignoredRegexp = '<object[^>]*>.*?<\/object>|<span[^>]*>.*?<\/span>|<(?:object|embed|svg|img|div|span|p|a)[^>]*>';
     public static $unicodeRegexp = '([#0-9](?>\\xEF\\xB8\\x8F)?\\xE2\\x83\\xA3|\\xC2[\\xA9\\xAE]|\\xE2..(?>\\xEF\\xB8\\x8F)?|\\xE3(?>\\x80[\\xB0\\xBD]|\\x8A[\\x97\\x99])(?>\\xEF\\xB8\\x8F)?|\\xF0\\x9F(?>[\\x80-\\x86].(?>\\xEF\\xB8\\x8F)?|\\x87.\\xF0\\x9F\\x87.|..))';
     public static $shortcodeRegexp = ':([-+\\w]+):';
-
+    
+    
+    public static $imageRegexpPNG = '';
+    public static $imageRegexpSVG = '<object class="emojione"[^>]*>(.*?)<\/object>';
+    
+    
     protected static $client = null;
 
     /**
